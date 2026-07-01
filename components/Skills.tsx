@@ -80,9 +80,9 @@ function MarqueeRow({ skills, duration, reverse = false }: {
                     {skills.map((skill, i) => (
                         <div
                             key={`a-${i}`}
-                            className={`flex items-center gap-2 px-5 py-2.5 rounded-full border font-mono text-sm font-medium whitespace-nowrap ${colorMap[skill.color]}`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 md:px-5 md:py-2.5 rounded-full border font-mono text-xs md:text-sm font-medium whitespace-nowrap ${colorMap[skill.color]}`}
                         >
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotMap[skill.color]}`} />
+                            <span className={`w-1 h-1 md:w-1.5 md:h-1.5 rounded-full shrink-0 ${dotMap[skill.color]}`} />
                             {skill.name}
                         </div>
                     ))}
