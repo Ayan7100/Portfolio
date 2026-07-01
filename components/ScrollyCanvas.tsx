@@ -4,11 +4,28 @@ import { useEffect, useRef, useState } from "react";
 import { useScroll, useMotionValueEvent } from "framer-motion";
 import Overlay from "./Overlay";
 
+function useIsMobile() {
+    const [isMobile, setIsMobile] = useState(false);
+    useEffect(() => {
+        const check = () => setIsMobile(window.innerWidth < 768);
+        check();
+        window.addEventListener("resize", check);
+        return () => window.removeEventListener("resize", check);
+    }, []);
+    return isMobile;
+}
+
 export default function ScrollyCanvas({ frameCount = 96 }: { frameCount?: number }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [images, setImages] = useState<HTMLImageElement[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
+    const isMobile = useIsMobile();
+
+    // Mobile: load every 2nd frame → 48 images, covering full animation
+    const mobileStep = 2;
+    const mobileFrames = Math.ceil(frameCount / mobileStep);
+    const activeFrameCount = isMobile ? mobileFrames : frameCount;
 
     const { scrollYProgress } = useScroll({
         target: containerRef,
@@ -16,20 +33,27 @@ export default function ScrollyCanvas({ frameCount = 96 }: { frameCount?: number
     });
 
     useEffect(() => {
+        setIsLoaded(false);
+        setImages([]);
+
         const loadImages = async () => {
             const loadedImages: HTMLImageElement[] = [];
             const promises: Promise<void>[] = [];
 
-            for (let i = 0; i < frameCount; i++) {
+            const count = isMobile ? mobileFrames : frameCount;
+            const ext = "webp";
+            const dir = "/sequence-webp/";
+
+            for (let i = 0; i < count; i++) {
+                const sourceIndex = isMobile ? i * mobileStep : i;
                 const promise = new Promise<void>((resolve) => {
                     const img = new Image();
-                    const frameId = i.toString().padStart(4, "0");
-                    img.src = `/sequence/${frameId}.png`;
+                    const frameId = sourceIndex.toString().padStart(4, "0");
+                    img.src = `${dir}${frameId}.${ext}`;
                     img.onload = () => {
                         loadedImages[i] = img;
                         resolve();
                     };
-                    // Handle error gracefully
                     img.onerror = () => resolve();
                 });
                 promises.push(promise);
@@ -41,7 +65,7 @@ export default function ScrollyCanvas({ frameCount = 96 }: { frameCount?: number
         };
 
         loadImages();
-    }, [frameCount]);
+    }, [isMobile, frameCount]);
 
     const renderFrame = (index: number) => {
         const canvas = canvasRef.current;
@@ -52,7 +76,6 @@ export default function ScrollyCanvas({ frameCount = 96 }: { frameCount?: number
 
         const img = images[index];
 
-        // Responsive Object-Fit Cover Logic
         const canvasRatio = canvas.width / canvas.height;
         const imgRatio = img.width / img.height;
 
@@ -70,7 +93,6 @@ export default function ScrollyCanvas({ frameCount = 96 }: { frameCount?: number
             offsetY = (canvas.height - drawHeight) / 2;
         }
 
-        // Clear and Draw
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#121212";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -80,34 +102,35 @@ export default function ScrollyCanvas({ frameCount = 96 }: { frameCount?: number
     useMotionValueEvent(scrollYProgress, "change", (latest) => {
         if (!isLoaded || images.length === 0) return;
         const frameIndex = Math.min(
-            frameCount - 1,
-            Math.floor(latest * frameCount)
+            activeFrameCount - 1,
+            Math.floor(latest * activeFrameCount)
         );
         requestAnimationFrame(() => renderFrame(frameIndex));
     });
 
-    // Handle resize
     useEffect(() => {
         const handleResize = () => {
             if (canvasRef.current) {
                 canvasRef.current.width = window.innerWidth;
                 canvasRef.current.height = window.innerHeight;
             }
-        }
-        window.addEventListener('resize', handleResize);
+        };
+        window.addEventListener("resize", handleResize);
         handleResize();
-        return () => window.removeEventListener('resize', handleResize);
+        return () => window.removeEventListener("resize", handleResize);
     }, []);
 
-    // Initial render when loaded
     useEffect(() => {
         if (isLoaded) {
             renderFrame(0);
         }
     }, [isLoaded]);
 
+    // Mobile: 300vh (fast scroll), Desktop: 500vh (cinematic)
+    const scrollHeight = isMobile ? "h-[300vh]" : "h-[500vh]";
+
     return (
-        <div ref={containerRef} className="h-[500vh] relative">
+        <div ref={containerRef} className={`${scrollHeight} relative`}>
             <div className="sticky top-0 h-screen w-full overflow-hidden">
                 {!isLoaded && (
                     <div className="absolute inset-0 flex items-center justify-center text-white z-50">
