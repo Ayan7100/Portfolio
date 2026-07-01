@@ -61,6 +61,8 @@ const dotMap: Record<string, string> = {
     purple: "bg-purple-400",
 };
 
+// ─── Marquee row ──────────────────────────────────────────────────────────────
+
 function MarqueeRow({ skills, duration, reverse = false }: {
     skills: Skill[];
     duration: string;
@@ -70,39 +72,104 @@ function MarqueeRow({ skills, duration, reverse = false }: {
 
     return (
         <div className="overflow-hidden">
-            {/* Two identical copies side-by-side → seamless loop */}
             <div
-                style={{ animation: `${animation} ${duration} linear infinite` }}
+                style={{
+                    animation: `${animation} ${duration} linear infinite`,
+                    // Force GPU compositing — eliminates 2s stutter
+                    willChange: "transform",
+                    transform: "translateZ(0)",
+                }}
                 className="flex w-max"
             >
-                {/* Copy 1 */}
-                <div className="flex gap-4 pr-4">
-                    {skills.map((skill, i) => (
-                        <div
-                            key={`a-${i}`}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 md:px-5 md:py-2.5 rounded-full border font-mono text-xs md:text-sm font-medium whitespace-nowrap ${colorMap[skill.color]}`}
-                        >
-                            <span className={`w-1 h-1 md:w-1.5 md:h-1.5 rounded-full shrink-0 ${dotMap[skill.color]}`} />
-                            {skill.name}
-                        </div>
-                    ))}
-                </div>
-                {/* Copy 2 (identical — makes loop seamless) */}
-                <div className="flex gap-4 pr-4" aria-hidden>
-                    {skills.map((skill, i) => (
-                        <div
-                            key={`b-${i}`}
-                            className={`flex items-center gap-2 px-5 py-2.5 rounded-full border font-mono text-sm font-medium whitespace-nowrap ${colorMap[skill.color]}`}
-                        >
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotMap[skill.color]}`} />
-                            {skill.name}
-                        </div>
-                    ))}
-                </div>
+                {/* Two identical copies → seamless infinite loop */}
+                {[0, 1].map((copy) => (
+                    <div key={copy} className="flex gap-4 pr-4" aria-hidden={copy === 1 ? true : undefined}>
+                        {skills.map((skill, i) => (
+                            <div
+                                key={i}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 md:px-5 md:py-2.5 rounded-full border font-mono text-xs md:text-sm font-medium whitespace-nowrap ${colorMap[skill.color]}`}
+                            >
+                                <span className={`w-1 h-1 md:w-1.5 md:h-1.5 rounded-full shrink-0 ${dotMap[skill.color]}`} />
+                                {skill.name}
+                            </div>
+                        ))}
+                    </div>
+                ))}
             </div>
         </div>
     );
 }
+
+// ─── Mobile category cards ────────────────────────────────────────────────────
+
+const categories = [
+    {
+        label:  "Core & ML",
+        color:  "orange" as const,
+        skills: row1,
+        border: "border-orange-500/25",
+        title:  "text-orange-400",
+        dot:    "bg-orange-400",
+        glow:   "shadow-[0_0_32px_rgba(249,115,22,0.07)]",
+    },
+    {
+        label:  "Generative AI",
+        color:  "blue" as const,
+        skills: row2,
+        border: "border-blue-500/25",
+        title:  "text-blue-400",
+        dot:    "bg-blue-400",
+        glow:   "shadow-[0_0_32px_rgba(59,130,246,0.07)]",
+    },
+    {
+        label:  "MLOps & Cloud",
+        color:  "purple" as const,
+        skills: row3,
+        border: "border-purple-500/25",
+        title:  "text-purple-400",
+        dot:    "bg-purple-400",
+        glow:   "shadow-[0_0_32px_rgba(168,85,247,0.07)]",
+    },
+];
+
+function CategoryCards() {
+    return (
+        <div className="md:hidden px-4 mt-10 space-y-4">
+            {categories.map((cat, idx) => (
+                <motion.div
+                    key={cat.label}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: idx * 0.1 }}
+                    viewport={{ once: true }}
+                    className={`rounded-2xl border ${cat.border} bg-[#0a0a0a] p-5 ${cat.glow}`}
+                >
+                    {/* Card header */}
+                    <div className="flex items-center gap-2 mb-4">
+                        <span className={`w-1.5 h-1.5 rounded-full ${cat.dot}`} />
+                        <span className={`text-xs font-mono tracking-widest uppercase ${cat.title}`}>
+                            {cat.label}
+                        </span>
+                    </div>
+
+                    {/* Skill chips */}
+                    <div className="flex flex-wrap gap-2">
+                        {cat.skills.map((skill) => (
+                            <span
+                                key={skill.name}
+                                className={`px-2.5 py-1 rounded-full text-xs font-mono border whitespace-nowrap ${colorMap[skill.color]}`}
+                            >
+                                {skill.name}
+                            </span>
+                        ))}
+                    </div>
+                </motion.div>
+            ))}
+        </div>
+    );
+}
+
+// ─── Section ──────────────────────────────────────────────────────────────────
 
 export default function Skills() {
     return (
@@ -110,53 +177,56 @@ export default function Skills() {
             <div className="absolute inset-0 bg-[#0d0d0d]" />
             <div className="relative z-[2]">
 
-            {/* Header */}
-            <motion.div
-                initial={{ opacity: 0, y: 24 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8 }}
-                viewport={{ once: true }}
-                className="text-center mb-16 px-4"
-            >
-                <p className="text-orange-500 font-mono text-xs tracking-[0.3em] uppercase mb-5">
-                    Technical Expertise
-                </p>
-                <h2 className="text-5xl md:text-7xl font-bold tracking-tighter text-white">
-                    Skills
-                </h2>
-            </motion.div>
+                {/* Header */}
+                <motion.div
+                    initial={{ opacity: 0, y: 24 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.8 }}
+                    viewport={{ once: true }}
+                    className="text-center mb-16 px-4"
+                >
+                    <p className="text-orange-500 font-mono text-xs tracking-[0.3em] uppercase mb-5">
+                        Technical Expertise
+                    </p>
+                    <h2 className="text-5xl md:text-7xl font-bold tracking-tighter text-white">
+                        Skills
+                    </h2>
+                </motion.div>
 
-            {/* Scrolling rows */}
-            <div className="space-y-5 relative">
-                {/* Fade left & right edges */}
-                <div className="pointer-events-none absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-[#0d0d0d] to-transparent z-10" />
-                <div className="pointer-events-none absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-[#0d0d0d] to-transparent z-10" />
+                {/* Scrolling marquee rows */}
+                <div className="space-y-5 relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-[#0d0d0d] to-transparent z-10" />
+                    <div className="pointer-events-none absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-[#0d0d0d] to-transparent z-10" />
 
-                <MarqueeRow skills={row1} duration="30s" />
-                <MarqueeRow skills={row2} duration="25s" reverse />
-                <MarqueeRow skills={row3} duration="35s" />
+                    <MarqueeRow skills={row1} duration="30s" />
+                    <MarqueeRow skills={row2} duration="25s" reverse />
+                    <MarqueeRow skills={row3} duration="35s" />
+                </div>
+
+                {/* Mobile-only category cards */}
+                <CategoryCards />
+
+                {/* Legend */}
+                <motion.div
+                    initial={{ opacity: 0, y: 16 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.8, delay: 0.2 }}
+                    viewport={{ once: true }}
+                    className="flex items-center justify-center gap-8 mt-14 px-4"
+                >
+                    {[
+                        { label: "Core & ML",      color: "bg-orange-400" },
+                        { label: "Generative AI",  color: "bg-blue-400"   },
+                        { label: "MLOps & Cloud",  color: "bg-purple-400" },
+                    ].map((cat) => (
+                        <div key={cat.label} className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${cat.color}`} />
+                            <span className="text-gray-500 text-xs font-mono">{cat.label}</span>
+                        </div>
+                    ))}
+                </motion.div>
+
             </div>
-
-            {/* Legend */}
-            <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, delay: 0.2 }}
-                viewport={{ once: true }}
-                className="flex items-center justify-center gap-8 mt-14 px-4"
-            >
-                {[
-                    { label: "Core & ML", color: "bg-orange-400" },
-                    { label: "Generative AI", color: "bg-blue-400" },
-                    { label: "MLOps & Cloud", color: "bg-purple-400" },
-                ].map((cat) => (
-                    <div key={cat.label} className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${cat.color}`} />
-                        <span className="text-gray-500 text-xs font-mono">{cat.label}</span>
-                    </div>
-                ))}
-            </motion.div>
-            </div>{/* z-[2] content wrapper */}
         </section>
     );
 }
