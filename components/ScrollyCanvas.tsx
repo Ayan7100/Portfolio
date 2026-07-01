@@ -28,7 +28,7 @@ function drawBitmapCover(canvas: HTMLCanvasElement, bitmap: ImageBitmap) {
         ox = (cw - dw) / 2; oy = 0;
     } else {
         dw = cw; dh = bitmap.height * (cw / bitmap.width);
-        ox = 0; oy = (ch - dh) / 2;
+        ox = 0; oy = 0; // top-align: head visible, feet cropped
     }
     ctx.fillStyle = "#121212";
     ctx.fillRect(0, 0, cw, ch);
@@ -164,13 +164,13 @@ export default function ScrollyCanvas({ frameCount = 96 }: { frameCount?: number
     const handleFirstFrame = useCallback(() => setFirstFrame(true), []);
     const handleAllLoaded  = useCallback(() => setAllLoaded(true),  []);
 
-    // Mobile only: lock body scroll until all frames are in GPU memory
+    // Lock body scroll until all frames decoded (both mobile and desktop)
     useEffect(() => {
-        if (!isMobile || allLoaded) return;
+        if (allLoaded) return;
         const prev = document.body.style.overflow;
         document.body.style.overflow = "hidden";
         return () => { document.body.style.overflow = prev; };
-    }, [isMobile, allLoaded]);
+    }, [allLoaded]);
 
     if (!mounted) return <div className="bg-[#121212]" style={{ height: "100vh" }} />;
 
@@ -180,9 +180,8 @@ export default function ScrollyCanvas({ frameCount = 96 }: { frameCount?: number
         : { frameCount,                     dir: "/sequence-webp/",   frameStep: 1,                 scrollVh: 500,
             onProgress: handleProgress, onFirstFrame: handleFirstFrame, onAllLoaded: handleAllLoaded };
 
-    // Desktop: overlay gone after 1 fetch (frame 0) — typically < 1s
-    // Mobile: overlay gone after all 32 frames — locks scroll, shows progress
-    const overlayVisible = isMobile ? !allLoaded : !firstFrame;
+    // Both desktop and mobile: overlay + scroll lock until all frames loaded
+    const overlayVisible = !allLoaded;
 
     return (
         <div className="relative">
@@ -197,22 +196,14 @@ export default function ScrollyCanvas({ frameCount = 96 }: { frameCount?: number
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.4 }}
                     >
-                        {isMobile ? (
-                            // Mobile: progress bar (waits for all 32 frames)
-                            <>
-                                <p className="text-white/50 text-xs font-mono tracking-widest uppercase">Loading</p>
-                                <div className="w-48 h-px bg-white/10 relative overflow-hidden">
-                                    <div
-                                        className="absolute inset-y-0 left-0 bg-white transition-all duration-150"
-                                        style={{ width: `${Math.round(progress * 100)}%` }}
-                                    />
-                                </div>
-                                <p className="text-white/30 text-xs font-mono">{Math.round(progress * 100)}%</p>
-                            </>
-                        ) : (
-                            // Desktop: spinner only, disappears after first frame (~1 fetch)
-                            <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                        )}
+                        <p className="text-white/50 text-xs font-mono tracking-widest uppercase">Loading</p>
+                        <div className="w-48 h-px bg-white/10 relative overflow-hidden">
+                            <div
+                                className="absolute inset-y-0 left-0 bg-white transition-all duration-150"
+                                style={{ width: `${Math.round(progress * 100)}%` }}
+                            />
+                        </div>
+                        <p className="text-white/30 text-xs font-mono">{Math.round(progress * 100)}%</p>
                     </motion.div>
                 )}
             </AnimatePresence>
