@@ -120,11 +120,12 @@ function CanvasHero({ frameCount, dir, frameStep, scrollVh, onProgress, onReady 
     });
 
     useEffect(() => {
+        const NAVBAR_H = 64; // matches Navbar h-16
         const resize = () => {
             if (!canvasRef.current) return;
             canvasRef.current.width  = window.innerWidth;
-            canvasRef.current.height = window.innerHeight;
-            lastFrame.current = -1;  // force redraw
+            canvasRef.current.height = window.innerHeight - NAVBAR_H;
+            lastFrame.current = -1;
             if (bitmaps.current[0]) drawFrame(0);
         };
         window.addEventListener("resize", resize);
@@ -134,7 +135,8 @@ function CanvasHero({ frameCount, dir, frameStep, scrollVh, onProgress, onReady 
 
     return (
         <div ref={containerRef} style={{ height: `${scrollVh}vh` }} className="relative">
-            <div className="sticky top-0 h-screen w-full overflow-hidden">
+            {/* sticky top-16 = starts below the fixed navbar, no head clipping */}
+            <div className="sticky top-16 h-[calc(100vh-4rem)] w-full overflow-hidden">
                 <canvas ref={canvasRef} className="block w-full h-full" />
                 <Overlay scrollYProgress={scrollYProgress} />
             </div>
