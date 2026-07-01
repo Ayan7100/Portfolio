@@ -28,26 +28,25 @@ function drawBitmapCover(canvas: HTMLCanvasElement, bitmap: ImageBitmap) {
         ox = (cw - dw) / 2; oy = 0;
     } else {
         dw = cw; dh = bitmap.height * (cw / bitmap.width);
-        ox = 0; oy = 0; // top-align: head visible, feet cropped
+        ox = 0; oy = 0;
     }
     ctx.fillStyle = "#121212";
     ctx.fillRect(0, 0, cw, ch);
     ctx.drawImage(bitmap, ox, oy, dw, dh);
 }
 
-// ─── Canvas hero ──────────────────────────────────────────────────────────────
+// ─── Canvas hero ─────────────────────────────────────────────────────────────
 
 interface HeroProps {
+    videoSrc:     string;
     frameCount:   number;
-    dir:          string;
-    frameStep:    number;
     scrollVh:     number;
     onProgress:   (p: number) => void;
-    onFirstFrame: () => void;   // frame 0 decoded → remove overlay
-    onAllLoaded:  () => void;   // all frames decoded → unlock mobile scroll
+    onFirstFrame: () => void;
+    onAllLoaded:  () => void;
 }
 
-function CanvasHero({ frameCount, dir, frameStep, scrollVh, onProgress, onFirstFrame, onAllLoaded }: HeroProps) {
+function CanvasHero({ videoSrc, frameCount, scrollVh, onProgress, onFirstFrame, onAllLoaded }: HeroProps) {
     const canvasRef    = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const bitmaps      = useRef<(ImageBitmap | null)[]>([]);
@@ -55,7 +54,6 @@ function CanvasHero({ frameCount, dir, frameStep, scrollVh, onProgress, onFirstF
     const rafRef       = useRef<number | null>(null);
     const lastFrame    = useRef(-1);
 
-    // stable refs — load effect never restarts due to callback churn
     const progressRef    = useRef(onProgress);
     const firstFrameRef  = useRef(onFirstFrame);
     const allLoadedRef   = useRef(onAllLoaded);
@@ -81,40 +79,63 @@ function CanvasHero({ frameCount, dir, frameStep, scrollVh, onProgress, onFirstF
         });
     }, []);
 
+    // ── Video frame extraction ───────────────────────────────────────────────
+    // Download 1 small MP4 → seek through each frame → extract to ImageBitmap
+    // Much faster than 96 individual fetch requests
     useEffect(() => {
-        let loaded = 0;
-        bitmaps.current    = new Array(frameCount).fill(null);
+        let cancelled = false;
+        bitmaps.current   = new Array(frameCount).fill(null);
         loadedMask.current = new Array(frameCount).fill(false);
 
-        const loadOne = async (i: number) => {
-            const frameId = (i * frameStep).toString().padStart(4, "0");
-            try {
-                const resp = await fetch(`${dir}${frameId}.webp`);
-                if (!resp.ok) return;
-                bitmaps.current[i]    = await createImageBitmap(await resp.blob());
-                loadedMask.current[i] = true;
-                loaded++;
-                progressRef.current(loaded / frameCount);
+        const video = document.createElement("video");
+        video.src        = videoSrc;
+        video.muted      = true;
+        video.playsInline = true;
+        video.preload    = "auto";
+        // crossOrigin needed for createImageBitmap on some browsers
+        video.crossOrigin = "anonymous";
+
+        const extract = async () => {
+            if (cancelled) return;
+            const duration = video.duration;
+
+            for (let i = 0; i < frameCount; i++) {
+                if (cancelled) return;
+
+                // Seek to the position for this frame
+                video.currentTime = (i / frameCount) * duration;
+                await new Promise<void>((resolve) => {
+                    video.addEventListener("seeked", () => resolve(), { once: true });
+                });
+
+                if (cancelled) return;
+
+                try {
+                    bitmaps.current[i]    = await createImageBitmap(video);
+                    loadedMask.current[i] = true;
+                } catch {
+                    // frame decode failed — leave null, scroll falls back to nearest
+                }
+
+                progressRef.current((i + 1) / frameCount);
                 if (i === 0) { drawFrame(0); firstFrameRef.current(); }
-                if (loaded === frameCount) allLoadedRef.current();
-            } catch { /* skip missing frame */ }
+                if (i === frameCount - 1) allLoadedRef.current();
+            }
         };
 
-        loadOne(0).then(() => {
-            const BATCH = 8;
-            const run = async () => {
-                for (let i = 1; i < frameCount; i += BATCH) {
-                    await Promise.all(
-                        Array.from({ length: Math.min(BATCH, frameCount - i) },
-                            (_, k) => loadOne(i + k))
-                    );
-                }
-            };
-            run();
-        });
+        video.addEventListener("canplaythrough", extract, { once: true });
+        video.addEventListener("error", () => {
+            // If video fails, nothing to do — loading bar just stays
+            console.error("Video load failed:", videoSrc);
+        }, { once: true });
 
-        return () => { bitmaps.current.forEach(b => b?.close()); };
-    }, [frameCount, dir, frameStep, drawFrame]);
+        video.load();
+
+        return () => {
+            cancelled = true;
+            video.src = "";
+        };
+    }, [videoSrc, frameCount, drawFrame]);
 
     useMotionValueEvent(scrollYProgress, "change", (latest) => {
         let target = Math.min(frameCount - 1, Math.floor(latest * frameCount));
@@ -146,17 +167,14 @@ function CanvasHero({ frameCount, dir, frameStep, scrollVh, onProgress, onFirstF
     );
 }
 
-// ─── Entry point ──────────────────────────────────────────────────────────────
-
-const MOBILE_FRAME_COUNT = 32;
-const MOBILE_FRAME_STEP  = 3;
+// ─── Entry point ─────────────────────────────────────────────────────────────
 
 export default function ScrollyCanvas({ frameCount = 96 }: { frameCount?: number }) {
-    const isMobile  = useIsMobile();
-    const [mounted,     setMounted]     = useState(false);
-    const [progress,    setProgress]    = useState(0);
-    const [firstFrame,  setFirstFrame]  = useState(false);
-    const [allLoaded,   setAllLoaded]   = useState(false);
+    const isMobile = useIsMobile();
+    const [mounted,    setMounted]    = useState(false);
+    const [progress,   setProgress]   = useState(0);
+    const [firstFrame, setFirstFrame] = useState(false);
+    const [allLoaded,  setAllLoaded]  = useState(false);
 
     useEffect(() => setMounted(true), []);
 
@@ -164,7 +182,7 @@ export default function ScrollyCanvas({ frameCount = 96 }: { frameCount?: number
     const handleFirstFrame = useCallback(() => setFirstFrame(true), []);
     const handleAllLoaded  = useCallback(() => setAllLoaded(true),  []);
 
-    // Lock body scroll until all frames decoded (both mobile and desktop)
+    // Lock scroll until all frames extracted into GPU memory
     useEffect(() => {
         if (allLoaded) return;
         const prev = document.body.style.overflow;
@@ -174,21 +192,21 @@ export default function ScrollyCanvas({ frameCount = 96 }: { frameCount?: number
 
     if (!mounted) return <div className="bg-[#121212]" style={{ height: "100vh" }} />;
 
-    const props: HeroProps = isMobile
-        ? { frameCount: MOBILE_FRAME_COUNT, dir: "/sequence-mobile/", frameStep: MOBILE_FRAME_STEP, scrollVh: 300,
-            onProgress: handleProgress, onFirstFrame: handleFirstFrame, onAllLoaded: handleAllLoaded }
-        : { frameCount,                     dir: "/sequence-webp/",   frameStep: 1,                 scrollVh: 500,
-            onProgress: handleProgress, onFirstFrame: handleFirstFrame, onAllLoaded: handleAllLoaded };
-
-    // Both desktop and mobile: overlay + scroll lock until all frames loaded
-    const overlayVisible = !allLoaded;
+    const props: HeroProps = {
+        videoSrc:     isMobile ? "/hero-mobile.mp4" : "/hero-desktop.mp4",
+        frameCount:   isMobile ? 32 : frameCount,
+        scrollVh:     isMobile ? 300 : 500,
+        onProgress:   handleProgress,
+        onFirstFrame: handleFirstFrame,
+        onAllLoaded:  handleAllLoaded,
+    };
 
     return (
         <div className="relative">
             <CanvasHero {...props} />
 
             <AnimatePresence>
-                {overlayVisible && (
+                {!allLoaded && (
                     <motion.div
                         key="loader"
                         className="fixed inset-0 z-[100] bg-[#121212] flex flex-col items-center justify-center gap-6"
