@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useScroll, useMotionValueEvent } from "framer-motion";
 import Overlay from "./Overlay";
 
@@ -18,94 +18,112 @@ function useIsMobile() {
 export default function ScrollyCanvas({ frameCount = 96 }: { frameCount?: number }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const [images, setImages] = useState<HTMLImageElement[]>([]);
-    const [isLoaded, setIsLoaded] = useState(false);
+    // ImageBitmap is GPU-decoded → drawImage is ~10x faster than HTMLImageElement
+    const bitmapsRef = useRef<(ImageBitmap | null)[]>([]);
+    const loadedMaskRef = useRef<boolean[]>([]);
+    const rafRef = useRef<number | null>(null);
+    const currentFrameRef = useRef(0);
+    const [firstFrameReady, setFirstFrameReady] = useState(false);
     const isMobile = useIsMobile();
 
-    // Mobile: load every 2nd frame → 48 images, covering full animation
-    const mobileStep = 2;
-    const mobileFrames = Math.ceil(frameCount / mobileStep);
-    const activeFrameCount = isMobile ? mobileFrames : frameCount;
+    // Mobile: every 3rd frame = 32 frames (~580KB), Desktop: all 96
+    const mobileStep = 3;
+    const activeFrameCount = isMobile ? Math.ceil(frameCount / mobileStep) : frameCount;
 
-    const { scrollYProgress } = useScroll({
-        target: containerRef,
-        offset: ["start start", "end end"],
-    });
-
-    useEffect(() => {
-        setIsLoaded(false);
-        setImages([]);
-
-        const loadImages = async () => {
-            const loadedImages: HTMLImageElement[] = [];
-            const promises: Promise<void>[] = [];
-
-            const count = isMobile ? mobileFrames : frameCount;
-            const ext = "webp";
-            const dir = "/sequence-webp/";
-
-            for (let i = 0; i < count; i++) {
-                const sourceIndex = isMobile ? i * mobileStep : i;
-                const promise = new Promise<void>((resolve) => {
-                    const img = new Image();
-                    const frameId = sourceIndex.toString().padStart(4, "0");
-                    img.src = `${dir}${frameId}.${ext}`;
-                    img.onload = () => {
-                        loadedImages[i] = img;
-                        resolve();
-                    };
-                    img.onerror = () => resolve();
-                });
-                promises.push(promise);
-            }
-
-            await Promise.all(promises);
-            setImages(loadedImages);
-            setIsLoaded(true);
-        };
-
-        loadImages();
-    }, [isMobile, frameCount]);
-
-    const renderFrame = (index: number) => {
+    const drawBitmap = useCallback((index: number) => {
         const canvas = canvasRef.current;
-        if (!canvas || !images[index]) return;
+        const bitmap = bitmapsRef.current[index];
+        if (!canvas || !bitmap) return;
 
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        const img = images[index];
+        const cw = canvas.width, ch = canvas.height;
+        const ir = bitmap.width / bitmap.height;
+        const cr = cw / ch;
 
-        const canvasRatio = canvas.width / canvas.height;
-        const imgRatio = img.width / img.height;
-
-        let drawWidth, drawHeight, offsetX, offsetY;
-
-        if (imgRatio > canvasRatio) {
-            drawHeight = canvas.height;
-            drawWidth = img.width * (canvas.height / img.height);
-            offsetX = (canvas.width - drawWidth) / 2;
-            offsetY = 0;
+        let dw, dh, ox, oy;
+        if (ir > cr) {
+            dh = ch; dw = bitmap.width * (ch / bitmap.height);
+            ox = (cw - dw) / 2; oy = 0;
         } else {
-            drawWidth = canvas.width;
-            drawHeight = img.height * (canvas.width / img.width);
-            offsetX = 0;
-            offsetY = (canvas.height - drawHeight) / 2;
+            dw = cw; dh = bitmap.height * (cw / bitmap.width);
+            ox = 0; oy = (ch - dh) / 2;
         }
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#121212";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
-    };
+        ctx.fillRect(0, 0, cw, ch);
+        ctx.drawImage(bitmap, ox, oy, dw, dh);
+    }, []);
+
+    const renderFrame = useCallback((index: number) => {
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(() => {
+            drawBitmap(index);
+            rafRef.current = null;
+        });
+    }, [drawBitmap]);
+
+    useEffect(() => {
+        setFirstFrameReady(false);
+        const count = activeFrameCount;
+        const step = isMobile ? mobileStep : 1;
+
+        bitmapsRef.current = new Array(count).fill(null);
+        loadedMaskRef.current = new Array(count).fill(false);
+
+        const loadFrame = async (i: number) => {
+            const sourceIndex = i * step;
+            const frameId = sourceIndex.toString().padStart(4, "0");
+            try {
+                const resp = await fetch(`/sequence-webp/${frameId}.webp`);
+                if (!resp.ok) return;
+                const blob = await resp.blob();
+                const bitmap = await createImageBitmap(blob);
+                bitmapsRef.current[i] = bitmap;
+                loadedMaskRef.current[i] = true;
+                if (i === 0) setFirstFrameReady(true);
+            } catch {
+                // frame missing — skip
+            }
+        };
+
+        // Load frame 0 first for instant display, then batch-load rest
+        loadFrame(0).then(() => {
+            // Load in batches of 8 to avoid hammering mobile network
+            const batchSize = 8;
+            const batches: Promise<void>[][] = [];
+            for (let i = 1; i < count; i += batchSize) {
+                const batch: Promise<void>[] = [];
+                for (let j = i; j < Math.min(i + batchSize, count); j++) {
+                    batch.push(loadFrame(j));
+                }
+                batches.push(batch);
+            }
+            const runBatches = async () => {
+                for (const batch of batches) {
+                    await Promise.all(batch);
+                }
+            };
+            runBatches();
+        });
+
+        return () => {
+            bitmapsRef.current.forEach(b => b?.close());
+        };
+    }, [isMobile, activeFrameCount]);
 
     useMotionValueEvent(scrollYProgress, "change", (latest) => {
-        if (!isLoaded || images.length === 0) return;
-        const frameIndex = Math.min(
+        if (!firstFrameReady) return;
+        const target = Math.min(
             activeFrameCount - 1,
             Math.floor(latest * activeFrameCount)
         );
-        requestAnimationFrame(() => renderFrame(frameIndex));
+        // Walk back to nearest loaded frame
+        let frame = target;
+        while (frame > 0 && !loadedMaskRef.current[frame]) frame--;
+        currentFrameRef.current = frame;
+        renderFrame(frame);
     });
 
     useEffect(() => {
@@ -113,34 +131,29 @@ export default function ScrollyCanvas({ frameCount = 96 }: { frameCount?: number
             if (canvasRef.current) {
                 canvasRef.current.width = window.innerWidth;
                 canvasRef.current.height = window.innerHeight;
+                renderFrame(currentFrameRef.current);
             }
         };
         window.addEventListener("resize", handleResize);
         handleResize();
         return () => window.removeEventListener("resize", handleResize);
-    }, []);
+    }, [renderFrame]);
 
     useEffect(() => {
-        if (isLoaded) {
-            renderFrame(0);
-        }
-    }, [isLoaded]);
+        if (firstFrameReady) renderFrame(0);
+    }, [firstFrameReady, renderFrame]);
 
-    // Mobile: 300vh (fast scroll), Desktop: 500vh (cinematic)
-    const scrollHeight = isMobile ? "h-[300vh]" : "h-[500vh]";
+    const scrollHeight = isMobile ? "h-[250vh]" : "h-[500vh]";
 
     return (
         <div ref={containerRef} className={`${scrollHeight} relative`}>
             <div className="sticky top-0 h-screen w-full overflow-hidden">
-                {!isLoaded && (
-                    <div className="absolute inset-0 flex items-center justify-center text-white z-50">
-                        Loading...
+                {!firstFrameReady && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-[#121212] z-50">
+                        <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                     </div>
                 )}
-                <canvas
-                    ref={canvasRef}
-                    className="block w-full h-full object-cover"
-                />
+                <canvas ref={canvasRef} className="block w-full h-full" />
                 <Overlay scrollYProgress={scrollYProgress} />
             </div>
         </div>
