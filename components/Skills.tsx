@@ -226,6 +226,33 @@ export default function Skills() {
                     ))}
                 </motion.div>
 
+                {/* Download Resume */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.3 }}
+                    viewport={{ once: true }}
+                    className="flex justify-center mt-12"
+                >
+                    <a
+                        href="/Ayan_resume3.pdf"
+                        download
+                        className="group flex items-center gap-3 px-8 py-3.5 rounded-full border border-white/15 bg-white/5 hover:bg-white/10 hover:border-white/30 transition-all duration-300 font-mono text-sm text-white/80 hover:text-white"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="w-4 h-4 transition-transform duration-300 group-hover:translate-y-0.5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={1.5}
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                        Download Resume
+                    </a>
+                </motion.div>
+
             </div>
         </section>
     );
