@@ -234,8 +234,8 @@ export default function ScrollyCanvas() {
     const props: HeroProps = isMobile
         ? {
             frameSrc:   "/sequence-webp",
-            frameStep:  3,
-            frameCount: 32,
+            frameStep:  2,
+            frameCount: 48,
             scrollVh:   300,
             onProgress:   handleProgress,
             onFirstFrame: handleFirstFrame,
