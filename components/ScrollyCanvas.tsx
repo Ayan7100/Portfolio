@@ -201,14 +201,13 @@ export default function ScrollyCanvas() {
 
     useEffect(() => setMounted(true), []);
 
-    // Fake bar: crawls 0→65% in 1.5s (ease-out), so user sees movement immediately
+    // Fake bar: linear 0→65% over 2s — always visibly moving, never static
     useEffect(() => {
         const start = performance.now();
         let raf: number;
         const animate = (now: number) => {
-            const t = Math.min((now - start) / 1500, 1);
-            const eased = 1 - Math.pow(1 - t, 2);
-            setSimProgress(eased * 0.65);
+            const t = Math.min((now - start) / 2000, 1);
+            setSimProgress(t * 0.65);
             if (t < 1) raf = requestAnimationFrame(animate);
         };
         raf = requestAnimationFrame(animate);
@@ -234,7 +233,7 @@ export default function ScrollyCanvas() {
 
     const props: HeroProps = isMobile
         ? {
-            frameSrc:   "/sequence-mobile",
+            frameSrc:   "/sequence-webp",
             frameStep:  3,
             frameCount: 32,
             scrollVh:   300,
