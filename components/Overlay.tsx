@@ -1,6 +1,6 @@
 "use client";
 
-import { useScroll, useTransform, motion, MotionValue } from "framer-motion";
+import { useTransform, motion, MotionValue } from "framer-motion";
 
 const Section = ({
     text,
@@ -39,13 +39,18 @@ const Section = ({
     return (
         <motion.div
             style={{ opacity, y }}
-            className={`fixed top-0 left-0 w-full h-full pointer-events-none flex flex-col justify-center px-8 md:px-20 ${alignClass}`}
+            // Mobile: text anchored to bottom so face stays visible
+            // Desktop: vertically centered as before
+            className={`fixed top-0 left-0 w-full h-full pointer-events-none flex flex-col justify-end pb-10 md:justify-center md:pb-0 px-8 md:px-20 ${alignClass}`}
         >
-            <h2 className="text-4xl md:text-7xl font-bold tracking-tighter text-white drop-shadow-lg">
+            {/* Mobile gradient so text is readable over image */}
+            <div className="md:hidden absolute inset-x-0 bottom-0 h-52 bg-gradient-to-t from-black/70 to-transparent" />
+
+            <h2 className="relative text-2xl md:text-7xl font-bold tracking-tighter text-white drop-shadow-lg">
                 {text}
             </h2>
             {subText && (
-                <p className="text-xl md:text-2xl text-gray-300 mt-4 font-light tracking-wide max-w-2xl">
+                <p className="relative text-xs md:text-2xl text-gray-300 mt-1.5 md:mt-4 font-light tracking-wide max-w-2xl">
                     {subText}
                 </p>
             )}
@@ -58,7 +63,7 @@ export default function Overlay({ scrollYProgress }: { scrollYProgress: MotionVa
         <>
             <Section
                 text="Ayan Ahmed."
-                subText="Aspiring AI Engineer · BS Computer Science · UET Lahore"
+                subText="Aspiring AI Engineer · BS Data Science · UET Lahore"
                 align="center"
                 start={0.05}
                 end={0.2}
