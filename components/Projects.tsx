@@ -154,7 +154,7 @@ export default function Projects() {
                         Selected Academic Projects
                     </p>
                     <h2 className="text-5xl md:text-7xl font-bold tracking-tighter text-white">
-                        Built With AI
+                        Projects
                     </h2>
                 </motion.div>
 
