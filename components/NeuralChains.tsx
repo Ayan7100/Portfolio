@@ -83,7 +83,7 @@ export default function NeuralChains() {
         setTimeout(() => {
             setup();
 
-            const chains: Chain[] = Array.from({ length: 45 }, () =>
+            const chains: Chain[] = Array.from({ length: 65 }, () =>
                 buildChain(W, neuralBottom, pageH, true)
             );
 
