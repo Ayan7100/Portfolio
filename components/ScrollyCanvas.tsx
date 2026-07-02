@@ -195,14 +195,32 @@ export default function ScrollyCanvas() {
     const isMobile = useIsMobile();
     const [mounted,    setMounted]    = useState(false);
     const [progress,   setProgress]   = useState(0);
+    const [simProgress, setSimProgress] = useState(0);
     const [firstFrame, setFirstFrame] = useState(false);
     const [allLoaded,  setAllLoaded]  = useState(false);
 
     useEffect(() => setMounted(true), []);
 
+    // Fake bar: crawls 0→65% in 1.5s (ease-out), so user sees movement immediately
+    useEffect(() => {
+        const start = performance.now();
+        let raf: number;
+        const animate = (now: number) => {
+            const t = Math.min((now - start) / 1500, 1);
+            const eased = 1 - Math.pow(1 - t, 2);
+            setSimProgress(eased * 0.65);
+            if (t < 1) raf = requestAnimationFrame(animate);
+        };
+        raf = requestAnimationFrame(animate);
+        return () => cancelAnimationFrame(raf);
+    }, []);
+
     const handleProgress   = useCallback((p: number) => setProgress(p), []);
     const handleFirstFrame = useCallback(() => setFirstFrame(true), []);
     const handleAllLoaded  = useCallback(() => setAllLoaded(true),  []);
+
+    // Displayed = whichever is higher: fake crawl or real progress
+    const displayedProgress = Math.max(simProgress, progress);
 
     // Lock scroll until all frames in GPU memory
     useEffect(() => {
@@ -250,10 +268,10 @@ export default function ScrollyCanvas() {
                         <div className="w-48 h-px bg-white/10 relative overflow-hidden">
                             <div
                                 className="absolute inset-y-0 left-0 bg-white transition-all duration-150"
-                                style={{ width: `${Math.round(progress * 100)}%` }}
+                                style={{ width: `${Math.round(displayedProgress * 100)}%` }}
                             />
                         </div>
-                        <p className="text-white/30 text-xs font-mono">{Math.round(progress * 100)}%</p>
+                        <p className="text-white/30 text-xs font-mono">{Math.round(displayedProgress * 100)}%</p>
                     </motion.div>
                 )}
             </AnimatePresence>
