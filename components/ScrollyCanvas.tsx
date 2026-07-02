@@ -206,7 +206,7 @@ export default function ScrollyCanvas() {
         const start = performance.now();
         let raf: number;
         const animate = (now: number) => {
-            const t = Math.min((now - start) / 2000, 1);
+            const t = Math.min((now - start) / 3500, 1);
             setSimProgress(t * 0.65);
             if (t < 1) raf = requestAnimationFrame(animate);
         };
